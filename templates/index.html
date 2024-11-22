@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Emotion-Aware AI Assistant</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.7.2/font/bootstrap-icons.css">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <div class="container mt-4">
+        <div class="row">
+            <div class="col-md-6">
+                <div class="card">
+                    <div class="card-header">
+                        <h3><i class="bi bi-camera-video"></i> Emotion Detection</h3>
+                    </div>
+                    <div class="card-body">
+                        <div class="video-container">
+                            <img src="{{ url_for('video_feed') }}" alt="Video Feed" class="video-feed">
+                        </div>
+                        <div class="detection-status mt-3">
+                            <div class="alert alert-info" id="livenessStatus">
+                                Initializing detection...
+                            </div>
+                            <div class="status-cards">
+                                <div class="status-card">
+                                    <div class="status-icon">
+                                        <i class="bi bi-eye"></i>
+                                    </div>
+                                    <div class="status-info">
+                                        <h6>Blinks</h6>
+                                        <span id="blinkCount">0</span>
+                                    </div>
+                                </div>
+                                <div class="status-card">
+                                    <div class="status-icon">
+                                        <i class="bi bi-emoji-smile"></i>
+                                    </div>
+                                    <div class="status-info">
+                                        <h6>Emotion</h6>
+                                        <span id="emotionStatus">detecting...</span>
+                                    </div>
+                                </div>
+                                <div class="status-card">
+                                    <div class="status-icon">
+                                        <i class="bi bi-arrow-left-right"></i>
+                                    </div>
+                                    <div class="status-info">
+                                        <h6>Face Direction</h6>
+                                        <span id="faceDirection">center</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="card mt-3">
+                    <div class="card-header">
+                        <h3><i class="bi bi-lightbulb"></i> Mood-Based Suggestions</h3>
+                    </div>
+                    <div class="card-body">
+                        <div id="suggestionsList" class="suggestions-container">
+                            <div class="placeholder-text">
+                                Analyzing your mood to provide personalized suggestions...
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="col-md-6">
+                <div class="card">
+                    <div class="card-header">
+                        <h3><i class="bi bi-chat-dots"></i> Emotional Support AI Chat</h3>
+                    </div>
+                    <div class="card-body">
+                        <div class="chat-container" id="chatContainer">
+                            <!-- Chat messages will appear here -->
+                        </div>
+                        <div class="input-group mt-3">
+                            <input type="text" id="userInput" class="form-control" 
+                                   placeholder="Share your thoughts or ask for support...">
+                            <button class="btn btn-primary" onclick="sendMessage()" id="sendButton">
+                                <i class="bi bi-send"></i> Send
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+</body>
+</html>
