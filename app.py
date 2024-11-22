@@ -4,9 +4,12 @@ import numpy as np
 import google.generativeai as genai
 from dotenv import load_dotenv
 import os
-from datetime import datetime
+from datetime import datetime, timedelta
 import time
 import logging
+import mediapipe as mp
+import json
+from collections import deque
 
 # Configure logging
 logging.basicConfig(level=logging.DEBUG)
@@ -25,6 +28,16 @@ except Exception as e:
 
 app = Flask(__name__)
 
+# Initialize MediaPipe Face Mesh
+mp_face_mesh = mp.solutions.face_mesh
+mp_drawing = mp.solutions.drawing_utils
+face_mesh = mp_face_mesh.FaceMesh(
+    max_num_faces=1,
+    refine_landmarks=True,
+    min_detection_confidence=0.5,
+    min_tracking_confidence=0.5
+)
+
 # Initialize camera
 try:
     camera = cv2.VideoCapture(0)
@@ -34,162 +47,143 @@ except Exception as e:
     logger.error(f"Error initializing camera: {str(e)}")
     camera = None
 
-# Global variables for detection
-blink_counter = 0
-blink_threshold = 3
-last_blink_time = time.time()
-eye_state = True
-face_direction = "center"
-liveness_status = "Checking..."
-last_face_direction = "center"
-direction_changes = 0
-last_direction_change_time = time.time()
-current_activity = "neutral"
-activity_confidence = 0
-last_activity_time = time.time()
-last_frame = None
-frame_height = 100  # Fixed height for ROI comparison
-
-# Activity-based assistance prompts
-activity_suggestions = {
-    "active": [
-        "Channel your energy positively",
-        "Take on a challenge",
-        "Exercise or dance",
-        "Start a project",
-        "Join group activities"
+# Emotion-specific suggestions
+emotion_suggestions = {
+    'happy': [
+        "🌟 Share your joy with others!",
+        "🎵 Create a happy playlist",
+        "📸 Capture this moment",
+        "🎨 Channel creativity",
+        "🤝 Connect with friends"
     ],
-    "happy": [
-        "Share your joy with others",
-        "Try something creative",
-        "Plan something exciting",
-        "Express gratitude",
-        "Spread positivity"
+    'sad': [
+        "🧘‍♂️ Try deep breathing",
+        "🎵 Listen to uplifting music",
+        "🌳 Take a nature walk",
+        "📞 Talk to a friend",
+        "📝 Journal your feelings"
     ],
-    "neutral": [
-        "Set new goals",
-        "Learn something new",
-        "Connect with friends",
-        "Organize your space",
-        "Start a new hobby"
+    'angry': [
+        "🧘‍♂️ Practice meditation",
+        "💪 Exercise to release tension",
+        "🎵 Listen to calming music",
+        "✍️ Write out your thoughts",
+        "🌊 Try deep breathing"
     ],
-    "calm": [
-        "Practice mindfulness",
-        "Read a book",
-        "Listen to soothing music",
-        "Take a peaceful walk",
-        "Try gentle stretching"
+    'surprised': [
+        "📝 Write down what surprised you",
+        "🤔 Reflect on the moment",
+        "💭 Share the experience",
+        "🎯 Channel the energy",
+        "📸 Document the moment"
+    ],
+    'neutral': [
+        "🎯 Set a new goal",
+        "📚 Learn something new",
+        "🌱 Start a project",
+        "💪 Do some exercise",
+        "🧘‍♂️ Try meditation"
+    ],
+    'fearful': [
+        "🧘‍♂️ Practice grounding exercises",
+        "💕 Talk to someone you trust",
+        "📝 List your concerns",
+        "🎵 Listen to soothing music",
+        "🌈 Focus on positive thoughts"
     ]
 }
 
-def safe_cv2_operation(func):
-    def wrapper(*args, **kwargs):
-        try:
-            return func(*args, **kwargs)
-        except Exception as e:
-            logger.error(f"Error in {func.__name__}: {str(e)}")
-            return None
-    return wrapper
-
-@safe_cv2_operation
-def detect_blink(frame, face_cascade, eye_cascade):
-    global blink_counter, last_blink_time, eye_state
-    
-    gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-    faces = face_cascade.detectMultiScale(gray, 1.3, 5)
-    
-    for (x, y, w, h) in faces:
-        roi_gray = gray[y:y + h, x:x + w]
-        eyes = eye_cascade.detectMultiScale(roi_gray)
+class EmotionDetector:
+    def __init__(self):
+        self.emotions = ['happy', 'sad', 'angry', 'surprised', 'neutral', 'fearful']
+        self.last_emotion = 'neutral'
+        self.emotion_confidence = 0
+        self.emotion_history = deque(maxlen=10)
+        self.last_update = time.time()
         
-        if len(eyes) >= 2:
-            if eye_state and time.time() - last_blink_time > 1:
-                eye_state = False
-                blink_counter += 1
-                last_blink_time = time.time()
+    def detect_emotion(self, landmarks):
+        # Extract facial features
+        mouth_corners = [landmarks[61], landmarks[291]]  # Mouth corners
+        eyebrows = [landmarks[66], landmarks[296]]  # Eyebrows
+        eyes = [landmarks[159], landmarks[386]]  # Eyes
+        
+        # Calculate facial metrics
+        mouth_width = abs(mouth_corners[0].x - mouth_corners[1].x)
+        mouth_height = abs(mouth_corners[0].y - mouth_corners[1].y)
+        eyebrow_height = (eyebrows[0].y + eyebrows[1].y) / 2
+        eye_height = (eyes[0].y + eyes[1].y) / 2
+        
+        # Emotion detection logic
+        smile_ratio = mouth_width / mouth_height if mouth_height > 0 else 0
+        eyebrow_raise = eyebrow_height - eye_height
+        
+        # Determine emotion based on facial features
+        if smile_ratio > 4.0:
+            emotion = 'happy'
+            confidence = min(100, smile_ratio * 20)
+        elif eyebrow_raise < -0.02:
+            emotion = 'sad'
+            confidence = min(100, abs(eyebrow_raise) * 1000)
+        elif eyebrow_raise > 0.03:
+            emotion = 'surprised'
+            confidence = min(100, eyebrow_raise * 1000)
+        elif mouth_height > 0.1:
+            emotion = 'angry'
+            confidence = min(100, mouth_height * 500)
+        elif abs(mouth_corners[0].y - mouth_corners[1].y) > 0.02:
+            emotion = 'fearful'
+            confidence = min(100, abs(mouth_corners[0].y - mouth_corners[1].y) * 1000)
         else:
-            eye_state = True
-    
-    return blink_counter
-
-@safe_cv2_operation
-def detect_face_direction(frame, face_cascade):
-    global face_direction, last_face_direction, direction_changes, last_direction_change_time
-    
-    gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-    faces = face_cascade.detectMultiScale(gray, 1.3, 5)
-    
-    if len(faces) > 0:
-        (x, y, w, h) = faces[0]
-        face_center = x + w//2
-        frame_center = frame.shape[1]//2
+            emotion = 'neutral'
+            confidence = 70
         
-        if face_center < frame_center - 50:
-            new_direction = "left"
-        elif face_center > frame_center + 50:
-            new_direction = "right"
-        else:
-            new_direction = "center"
-        
-        if new_direction != last_face_direction and time.time() - last_direction_change_time > 1:
-            direction_changes += 1
-            last_direction_change_time = time.time()
-            last_face_direction = new_direction
-        
-        face_direction = new_direction
-    
-    return direction_changes
-
-@safe_cv2_operation
-def detect_activity_level(frame, face_cascade):
-    global current_activity, activity_confidence, last_activity_time, last_frame
-    
-    if time.time() - last_activity_time < 1:
-        return current_activity, activity_confidence
-    
-    gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-    faces = face_cascade.detectMultiScale(gray, 1.3, 5)
-    
-    if len(faces) > 0:
-        (x, y, w, h) = faces[0]
-        # Extract face ROI and resize to fixed height while maintaining aspect ratio
-        face_roi = gray[y:y+h, x:x+w]
-        aspect_ratio = w / h
-        new_width = int(frame_height * aspect_ratio)
-        resized_roi = cv2.resize(face_roi, (new_width, frame_height))
-        
-        if last_frame is not None and last_frame.shape == resized_roi.shape:
-            # Calculate frame difference
-            frame_diff = cv2.absdiff(last_frame, resized_roi)
-            movement = np.mean(frame_diff)
+        # Smooth emotion transitions
+        if time.time() - self.last_update > 0.5:
+            self.emotion_history.append(emotion)
+            most_common = max(set(self.emotion_history), key=self.emotion_history.count)
             
-            # Determine activity level based on movement
-            if movement > 30:
-                current_activity = "active"
-                activity_confidence = min(movement / 50 * 100, 100)
-            elif movement > 15:
-                current_activity = "happy"
-                activity_confidence = min(movement / 30 * 100, 100)
-            elif movement > 5:
-                current_activity = "neutral"
-                activity_confidence = min(movement / 15 * 100, 100)
+            if most_common == self.last_emotion:
+                self.emotion_confidence = min(100, self.emotion_confidence + 10)
             else:
-                current_activity = "calm"
-                activity_confidence = min((5 - movement) / 5 * 100, 100)
+                self.last_emotion = most_common
+                self.emotion_confidence = confidence
+            
+            self.last_update = time.time()
         
-        last_frame = resized_roi
-        last_activity_time = time.time()
+        return self.last_emotion, self.emotion_confidence
+
+emotion_detector = EmotionDetector()
+
+def process_frame(frame):
+    # Convert to RGB for MediaPipe
+    rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+    results = face_mesh.process(rgb_frame)
     
-    return current_activity, activity_confidence
+    emotion = 'neutral'
+    confidence = 0
+    
+    if results.multi_face_landmarks:
+        landmarks = results.multi_face_landmarks[0].landmark
+        emotion, confidence = emotion_detector.detect_emotion(landmarks)
+        
+        # Draw facial landmarks
+        h, w, _ = frame.shape
+        for idx, lm in enumerate(landmarks):
+            pos = (int(lm.x * w), int(lm.y * h))
+            cv2.circle(frame, pos, 1, (0, 255, 0), -1)
+        
+        # Add emotion overlay
+        emotion_text = f"Emotion: {emotion.title()} ({confidence:.0f}%)"
+        cv2.putText(frame, emotion_text, (10, 30),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
+    
+    return frame, emotion, confidence
 
 def generate_frames():
     if not camera or not camera.isOpened():
         logger.error("Camera is not available")
         return
 
-    face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_frontalface_default.xml')
-    eye_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_eye.xml')
-    
     while True:
         try:
             success, frame = camera.read()
@@ -197,33 +191,12 @@ def generate_frames():
                 logger.error("Failed to read frame from camera")
                 break
             
-            # Detect face, eyes, and activity level
-            blinks = detect_blink(frame, face_cascade, eye_cascade)
-            movements = detect_face_direction(frame, face_cascade)
-            activity, conf = detect_activity_level(frame, face_cascade)
-            
-            # Update liveness status
-            global liveness_status
-            if blinks >= blink_threshold and movements >= 2:
-                liveness_status = "Live Person Detected!"
-            elif blinks >= blink_threshold:
-                liveness_status = "Blink Check Passed! Now turn your head slightly."
-            else:
-                liveness_status = f"Please blink naturally ({blinks}/{blink_threshold}) and turn your head slightly"
-            
-            # Draw status on frame
-            cv2.putText(frame, f"Status: {liveness_status}", (10, 30),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
-            cv2.putText(frame, f"Activity: {activity} ({conf:.1f}%)", (10, 60),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
-            cv2.putText(frame, f"Face Direction: {face_direction}", (10, 90),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
-            
-            ret, buffer = cv2.imencode('.jpg', frame)
-            frame = buffer.tobytes()
+            processed_frame, emotion, confidence = process_frame(frame)
+            ret, buffer = cv2.imencode('.jpg', processed_frame)
+            frame_bytes = buffer.tobytes()
             
             yield (b'--frame\r\n'
-                   b'Content-Type: image/jpeg\r\n\r\n' + frame + b'\r\n')
+                   b'Content-Type: image/jpeg\r\n\r\n' + frame_bytes + b'\r\n')
         except Exception as e:
             logger.error(f"Error in generate_frames: {str(e)}")
             break
@@ -241,13 +214,21 @@ def video_feed():
 @app.route('/get_status')
 def get_status():
     try:
-        suggestions = activity_suggestions.get(current_activity, activity_suggestions['neutral'])
+        frame = None
+        if camera and camera.isOpened():
+            success, frame = camera.read()
+            if success:
+                _, emotion, confidence = process_frame(frame)
+            else:
+                emotion, confidence = 'neutral', 0
+        else:
+            emotion, confidence = 'neutral', 0
+        
+        suggestions = emotion_suggestions.get(emotion, emotion_suggestions['neutral'])
+        
         return jsonify({
-            'status': liveness_status,
-            'blinks': blink_counter,
-            'face_direction': face_direction,
-            'activity': current_activity,
-            'activity_confidence': activity_confidence,
+            'emotion': emotion,
+            'confidence': confidence,
             'suggestions': suggestions
         })
     except Exception as e:
@@ -263,31 +244,42 @@ def ask_gemini():
         data = request.json
         question = data.get('question', '')
         
+        # Get current emotion and suggestions
+        frame = None
+        if camera and camera.isOpened():
+            success, frame = camera.read()
+            if success:
+                _, emotion, confidence = process_frame(frame)
+            else:
+                emotion, confidence = 'neutral', 0
+        else:
+            emotion, confidence = 'neutral', 0
+        
+        suggestions = emotion_suggestions.get(emotion, emotion_suggestions['neutral'])
+        
+        # Create context with emotional state
         context = (
-            f"Current user status: {liveness_status}\n"
-            f"Activity level: {current_activity} (confidence: {activity_confidence:.1f}%)\n"
-            f"Suggested activities for this state:\n"
-            f"{', '.join(activity_suggestions[current_activity])}\n\n"
+            f"Current emotional state: {emotion} (confidence: {confidence:.0f}%)\n\n"
+            f"Based on your current emotional state, here are some suggestions:\n"
+            f"{', '.join(suggestions)}\n\n"
+            f"User question: {question}\n\n"
+            "Please provide a response that:\n"
+            "1. Acknowledges and validates their current emotion\n"
+            "2. Addresses their question with empathy\n"
+            "3. Offers specific suggestions based on their emotional state\n"
+            "4. Includes encouraging and supportive language\n"
+            "5. Uses appropriate emojis to enhance engagement\n"
+            "Keep the response warm and supportive."
         )
         
-        enhanced_prompt = (
-            f"{context}\n"
-            f"Based on the user's current activity level and their question: {question}\n"
-            "Please provide a supportive response that:\n"
-            "1. Acknowledges their current state\n"
-            "2. Addresses their question\n"
-            "3. Suggests relevant activities based on their energy level\n"
-            "4. Offers encouragement and support\n"
-            "Make the response conversational but professional."
-        )
-        
-        response = model.generate_content(enhanced_prompt)
+        response = model.generate_content(context)
         
         return jsonify({
             'success': True,
             'response': response.text,
-            'activity': current_activity,
-            'suggestions': activity_suggestions[current_activity]
+            'emotion': emotion,
+            'confidence': confidence,
+            'suggestions': suggestions
         })
     except Exception as e:
         logger.error(f"Error in ask_gemini: {str(e)}")
@@ -295,11 +287,6 @@ def ask_gemini():
             'success': False,
             'error': str(e)
         }), 500
-
-@app.errorhandler(Exception)
-def handle_error(error):
-    logger.error(f"Unhandled error: {str(error)}")
-    return jsonify({'error': 'Internal server error'}), 500
 
 if __name__ == '__main__':
     app.run(debug=True)

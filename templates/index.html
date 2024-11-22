@@ -3,89 +3,186 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Emotion-Aware AI Assistant</title>
+    <title>AI Wellness Assistant</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.7.2/font/bootstrap-icons.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/animate.css/4.1.1/animate.min.css">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
 </head>
-<body>
-    <div class="container mt-4">
-        <div class="row">
-            <div class="col-md-6">
-                <div class="card">
-                    <div class="card-header">
-                        <h3><i class="bi bi-camera-video"></i> Emotion Detection</h3>
-                    </div>
-                    <div class="card-body">
-                        <div class="video-container">
-                            <img src="{{ url_for('video_feed') }}" alt="Video Feed" class="video-feed">
-                        </div>
-                        <div class="detection-status mt-3">
-                            <div class="alert alert-info" id="livenessStatus">
-                                Initializing detection...
-                            </div>
-                            <div class="status-cards">
-                                <div class="status-card">
-                                    <div class="status-icon">
-                                        <i class="bi bi-eye"></i>
-                                    </div>
-                                    <div class="status-info">
-                                        <h6>Blinks</h6>
-                                        <span id="blinkCount">0</span>
-                                    </div>
-                                </div>
-                                <div class="status-card">
-                                    <div class="status-icon">
-                                        <i class="bi bi-emoji-smile"></i>
-                                    </div>
-                                    <div class="status-info">
-                                        <h6>Emotion</h6>
-                                        <span id="emotionStatus">detecting...</span>
-                                    </div>
-                                </div>
-                                <div class="status-card">
-                                    <div class="status-icon">
-                                        <i class="bi bi-arrow-left-right"></i>
-                                    </div>
-                                    <div class="status-info">
-                                        <h6>Face Direction</h6>
-                                        <span id="faceDirection">center</span>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
+<body class="bg-light">
+    <div class="container-fluid py-4">
+        <div class="row justify-content-center">
+            <div class="col-lg-11">
+                <!-- Header -->
+                <div class="app-header text-center mb-4 animate__animated animate__fadeIn">
+                    <h1 class="display-4">
+                        <i class="bi bi-robot"></i> AI Wellness Assistant
+                    </h1>
+                    <p class="lead text-muted">Real-time emotion analysis and personalized wellness support</p>
                 </div>
-                
-                <div class="card mt-3">
-                    <div class="card-header">
-                        <h3><i class="bi bi-lightbulb"></i> Mood-Based Suggestions</h3>
-                    </div>
-                    <div class="card-body">
-                        <div id="suggestionsList" class="suggestions-container">
-                            <div class="placeholder-text">
-                                Analyzing your mood to provide personalized suggestions...
+
+                <div class="row">
+                    <!-- Left Column -->
+                    <div class="col-md-6">
+                        <!-- Video Feed Card -->
+                        <div class="card main-card">
+                            <div class="card-header d-flex justify-content-between align-items-center">
+                                <h3><i class="bi bi-camera-video"></i> Live Analysis</h3>
+                                <div id="statusBadge" class="status-badge">
+                                    <i class="bi bi-hourglass-split"></i> Initializing...
+                                </div>
+                            </div>
+                            <div class="card-body">
+                                <div class="video-container mb-3">
+                                    <img src="{{ url_for('video_feed') }}" alt="Video Feed" class="video-feed">
+                                    <div class="video-overlay" id="videoOverlay"></div>
+                                </div>
+
+                                <!-- Session Info -->
+                                <div class="session-info mb-3">
+                                    <div class="row">
+                                        <div class="col-6">
+                                            <div class="session-stat">
+                                                <i class="bi bi-clock"></i>
+                                                Session Duration: <span id="sessionDuration">0 min</span>
+                                            </div>
+                                        </div>
+                                        <div class="col-6">
+                                            <div class="session-stat">
+                                                <i class="bi bi-person-check"></i>
+                                                Status: <span id="livenessStatus">Checking...</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- Wellness Indicators -->
+                                <div class="wellness-indicators mb-3">
+                                    <div class="row">
+                                        <div class="col-4">
+                                            <div class="wellness-card">
+                                                <div id="stressIndicator" class="wellness-indicator">
+                                                    <i class="bi bi-heart-pulse"></i>
+                                                </div>
+                                                <div class="wellness-label">Stress</div>
+                                                <div class="wellness-value" id="stressLevel">-</div>
+                                            </div>
+                                        </div>
+                                        <div class="col-4">
+                                            <div class="wellness-card">
+                                                <div id="focusIndicator" class="wellness-indicator">
+                                                    <i class="bi bi-brain"></i>
+                                                </div>
+                                                <div class="wellness-label">Focus</div>
+                                                <div class="wellness-value" id="focusScore">-</div>
+                                            </div>
+                                        </div>
+                                        <div class="col-4">
+                                            <div class="wellness-card">
+                                                <div id="engagementIndicator" class="wellness-indicator">
+                                                    <i class="bi bi-graph-up"></i>
+                                                </div>
+                                                <div class="wellness-label">Engagement</div>
+                                                <div class="wellness-value" id="engagementLevel">-</div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- Mood Chart -->
+                                <div class="mood-chart-container">
+                                    <h4 class="chart-title">
+                                        <i class="bi bi-graph-up"></i> Real-time Wellness Metrics
+                                    </h4>
+                                    <div class="chart-wrapper">
+                                        <canvas id="moodChart"></canvas>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Suggestions Card -->
+                        <div class="card mt-4">
+                            <div class="card-header">
+                                <h3><i class="bi bi-lightbulb"></i> Smart Suggestions</h3>
+                            </div>
+                            <div class="card-body">
+                                <div id="suggestionsList" class="suggestions-container">
+                                    <div class="placeholder-text">
+                                        <i class="bi bi-hourglass-split"></i>
+                                        Analyzing your state to provide personalized suggestions...
+                                    </div>
+                                </div>
                             </div>
                         </div>
                     </div>
-                </div>
-            </div>
-            
-            <div class="col-md-6">
-                <div class="card">
-                    <div class="card-header">
-                        <h3><i class="bi bi-chat-dots"></i> Emotional Support AI Chat</h3>
-                    </div>
-                    <div class="card-body">
-                        <div class="chat-container" id="chatContainer">
-                            <!-- Chat messages will appear here -->
+
+                    <!-- Right Column -->
+                    <div class="col-md-6">
+                        <!-- AI Chat Card -->
+                        <div class="card main-card">
+                            <div class="card-header d-flex justify-content-between align-items-center">
+                                <h3><i class="bi bi-chat-dots"></i> Wellness Support Chat</h3>
+                                <div id="chatStatus" class="chat-status">
+                                    <i class="bi bi-clock"></i> Initializing...
+                                </div>
+                            </div>
+                            <div class="card-body">
+                                <div class="chat-container" id="chatContainer">
+                                    <div class="welcome-message">
+                                        <div class="welcome-icon">
+                                            <i class="bi bi-robot"></i>
+                                        </div>
+                                        <h4>Welcome to Your Wellness Journey!</h4>
+                                        <p>I'm here to support your well-being with personalized insights and guidance.</p>
+                                    </div>
+                                </div>
+                                <div class="chat-input-container">
+                                    <div class="input-group">
+                                        <input type="text" id="userInput" class="form-control" 
+                                               placeholder="Share your thoughts or ask for support..."
+                                               disabled>
+                                        <button class="btn btn-primary" id="sendButton" disabled>
+                                            <i class="bi bi-send"></i> Send
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
-                        <div class="input-group mt-3">
-                            <input type="text" id="userInput" class="form-control" 
-                                   placeholder="Share your thoughts or ask for support...">
-                            <button class="btn btn-primary" onclick="sendMessage()" id="sendButton">
-                                <i class="bi bi-send"></i> Send
-                            </button>
+
+                        <!-- Current State Card -->
+                        <div class="card mt-4">
+                            <div class="card-header">
+                                <h3><i class="bi bi-person-lines-fill"></i> Current State</h3>
+                            </div>
+                            <div class="card-body">
+                                <div class="current-state">
+                                    <div class="state-item">
+                                        <div class="state-label">
+                                            <i class="bi bi-emoji-smile"></i> Mood
+                                        </div>
+                                        <div class="state-value" id="currentMood">-</div>
+                                    </div>
+                                    <div class="state-item">
+                                        <div class="state-label">
+                                            <i class="bi bi-heart-pulse"></i> Stress Level
+                                        </div>
+                                        <div class="state-value stress-level" id="stressLevelDetail">-</div>
+                                    </div>
+                                    <div class="state-item">
+                                        <div class="state-label">
+                                            <i class="bi bi-brain"></i> Focus Score
+                                        </div>
+                                        <div class="state-value focus-score" id="focusScoreDetail">-</div>
+                                    </div>
+                                    <div class="state-item">
+                                        <div class="state-label">
+                                            <i class="bi bi-graph-up"></i> Engagement
+                                        </div>
+                                        <div class="state-value engagement-level" id="engagementLevelDetail">-</div>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -93,7 +190,9 @@
         </div>
     </div>
 
+    <!-- Scripts -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="{{ url_for('static', filename='js/main.js') }}"></script>
 </body>
 </html>
